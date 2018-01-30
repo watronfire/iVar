@@ -7,7 +7,9 @@ script_locations: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/script
 replicates: [ "a", "b" ]
 
 vco_location: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts/variantCombiner.py"
-vco_minAvgFreq: 0.01
+vco_test: 1
+vco_pvalue: 0.05
+vco_minFreq: 0.03
 
 vca_location: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts/VarScan.v2.3.9.jar"
 vca_compareWithReference: false
