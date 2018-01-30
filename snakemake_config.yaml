@@ -1,0 +1,28 @@
+---
+in_dir: "/gpfs/home/natem/analysis/testing/input"
+out_dir: "/gpfs/home/natem/analysis/testing"
+ref_sequence: "/gpfs/home/natem/db/zikv/FSS13025.fasta"
+virus_map: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/res/zikvMap.csv"
+script_locations: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts"
+replicates: [ "a", "b" ]
+
+vco_location: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts/variantCombiner.py"
+vco_minAvgFreq: 0.01
+
+vca_location: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts/VarScan.v2.3.9.jar"
+vca_compareWithReference: false
+vca_minCoverage: 1
+vca_minReads: 2
+vca_minVarFreq: 0.01
+vca_minAvgQual: 1
+vca_pvalue: 0.97
+
+tr_location: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts/trimmomatic-0.35.jar"
+tr_leading: 20
+tr_trailing: 20
+tr_sliding_window: "4:25"
+tr_min_len: 30
+tr_headcrop: 2
+
+cm_location: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts/coverageGraph.py"
+...
