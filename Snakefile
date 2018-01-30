@@ -45,7 +45,7 @@ rule variant_combining:
     output:
         "{out_dir}/_output/{sample}.csv"
     shell:
-        "python {s_locations}/variantCombiner.py -r {config[virus_map]} -o {output} -f 0.03 -i {input[0]} {input[1]}"
+        "python {s_locations}/variantCombiner.py -r {config[virus_map]} -o {output} -t {config[vco_test]} -p {config[vco_pvalue]} -f {config[vco_minAveFreq]} -i {input[0]} {input[1]}"
 
 if config["vca_compareWithReference"]:
     rule variant_calling:

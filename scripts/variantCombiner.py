@@ -38,8 +38,8 @@ class Variant:
 
     def __str__(self):
         frequencyList = list()
-        for k in self.frequency:
-            frequencyList.append( str( k * 100 ) + "%" )
+        for h in self.frequency:
+            frequencyList.append( str( h * 100 ) + "%" )
 
         self.freqA = sum( self.frequency ) / len( self.frequency )
         freqAStr = str( self.freqA * 100 ) + "%"
@@ -56,6 +56,8 @@ class Variant:
             attributes.append( freqAStr )
 
         return ",".join( attributes )
+
+pvLimit = 0.05
 
 def variantParser( variantFile ):
     returnDict = dict()
@@ -77,7 +79,14 @@ def variantParser( variantFile ):
             returnDict[iposition] = Variant( iposition, iancestral, isubstitution, icounts, ifrequency, iTotCounts )
     return returnDict
 
-# Calculates whether the variants are greater
+# Accepts variants based on whether or not all replicate frequencies are greater than some minimum.
+def freqLimit( variant, freqLim ):
+    outcomes = list()
+    for number in variant.frequency:
+        outcomes.append( number > freqLim )
+    return outcomes, variant.frequency
+
+# Calculates whether the variants are greater than the expected percentage
 def fisherTest( variant, ep ):
     outcomes = list()
     pvs = list()
@@ -89,9 +98,18 @@ def fisherTest( variant, ep ):
         # Values which can be changed are the fisher-exact test expected values, and the outcomes threshold.
         oddsratio, pvalue = fisher_exact( [ [number, remainder], [expectedPercent * 100, (1-expectedPercent) * 100] ], alternative="greater" )
         pvs.append( pvalue )
-        outcomes.append( pvalue < 0.05 )
+        outcomes.append( pvalue < pvLimit )
 
     return outcomes, pvs
+
+# Accepts variants based on whether or not the average frequency of all replicates is greater than some minimum.
+def averageFreqLimit( variant, freqLim ):
+    outcomes = list()
+    outcomes.append( variant.getAverage() > freqLim )
+    return outcomes, variant.frequency
+
+# Dictionary with reference to all statistical tests available.
+statTest = { 1 : fisherTest, 2 : freqLimit, 3 : averageFreqLimit }
 
 # Generate a translation table dictionary
 bases = ['T', 'C', 'A', 'G']
@@ -104,8 +122,19 @@ parser = argparse.ArgumentParser()
 parser.add_argument( "-r", "--reference", help="Path to virus map", type=str, required=True )
 parser.add_argument( "-o", "--output", help="Path to output file", type=str, required=True )
 parser.add_argument( "-f", "--frequency", help="Minimum variant frequency allowed", type=float, required=True )
-parser.add_argument( "-i", "--input", nargs="+", help="Path to input variant files", type=str, required=True)
+parser.add_argument( "-p", "--pvalue", help="Maximum p-value for a variant to be accepted", type=float, required=False )
+parser.add_argument( "-i", "--input", nargs="+", help="Path to input variant files", type=str, required=True )
+parser.add_argument( "-t", "--test", help="Statistical test used to confirm variants. 1-Fisher's Exact Test, 2-Strict Frequency Limit, 3-Average Frequency Limit", type=int, required=False )
 args = parser.parse_args()
+
+if args.test:
+    # Assign the test. Furthermore, if fishers exact test is used then a maximum p-value is required.
+    test = args.test
+    if test == 1:
+        pvLimit = args.pvalue
+# The default program will accept variants based on the average frequency.
+else:
+    test = 3
 
 reference = args.reference
 pathToOutput = args.output
@@ -143,46 +172,55 @@ pvalues = list()
 acceptedValues = dict()
 
 # Clean up dictionary...
-#sortedKeys = sorted( variantDict.keys(), key=int )
-
 for entry in list( variantDict.keys() ):
-    oc, pv = fisherTest( variantDict[entry], frequencyLimit )
 
-    if replicates > 1:
+    # TODO: customize the statistical test being used.
+    # the variable are called OutComes and P-Values, but pv will hold frequencies if test == 2
+    oc, pv = statTest[test]( variantDict[entry], frequencyLimit )
 
-        # Because of the way this program assembles the variantDict, entries in which replicates weren't found need to
-        # be removed.
-        if len( variantDict[entry].coverage ) < replicates:
-            del variantDict[entry]
-        else:
-            # Converts entry to an int so that it can be sorted. If left uncoverted, then matplotlib will sort the variants
-            # alphabetically, instead of numerically. Graph isn't the best...
-            graphDict[int(entry)] = pv
-            pvalues.extend( pv )
+    # Because of the way this program assembles the variantDict, entries in which replicates weren't found need to
+    # be removed.
+    if len( variantDict[entry].coverage ) != replicates:
+        del variantDict[entry]
 
-            # Creates a subset of graphDict which includes values which would have been accepted by a threshold test
-            # rather than the fisher exact test being used.
+    else:
+        # Converts entry to an int so that it can be sorted. If left uncoverted, then matplotlib will sort the variants
+        # alphabetically, instead of numerically. Graph isn't the best...
+        graphDict[int(entry)] = pv
+        pvalues.extend( pv )
+
+        # Creates a subset of graphDict which includes values which would have been accepted by a threshold test
+        # rather than the fisher exact test being used.
+        if test == 1:
             average = sum( variantDict[entry].frequency ) / len( variantDict[entry].frequency )
             if average > frequencyLimit :
                 acceptedValues[int(entry)] = graphDict[int(entry)]
 
-            # Deletes entries from variant dict unless all replicates pass fisher exact test.
-            if not all( oc ):
-                del variantDict[entry]
+        # Deletes entries from variant dict unless all replicates pass fisher exact test.
+        if not all( oc ):
+            del variantDict[entry]
 
 # Generates a histogram of p-values
 plt.subplot( 2, 1, 1 )
 
+# Calculates the lower end of the histogram so adequate resolution is seen.
 lowestNum = 0.01
 for i in list( graphDict.values() ):
     for k in i:
         if k < lowestNum:
             lowestNum = k
+
 n, bins, patches = plt.hist( pvalues, facecolor="red", alpha=0.75, bins=np.logspace(np.log10(lowestNum/10),np.log10(1.0), 50) )
 plt.gca().set_xscale( "log" )
-plt.gca().set_ylabel( "Frequency", weight="bold" )
-plt.gca().set_xlabel( "p-values", weight="bold" )
-plt.gca().set_title( "Histogram of p-values", weight="bold" )
+
+if test == 1:
+    plt.gca().set_ylabel( "Frequency", weight="bold" )
+    plt.gca().set_xlabel( "p-values", weight="bold" )
+    plt.gca().set_title( "Histogram of p-values", weight="bold" )
+else:
+    plt.gca().set_ylabel( "Frequency", weight = "bold" )
+    plt.gca().set_xlabel( "Frequency of Variant", weight = "bold" )
+    plt.gca().set_title( "Histogram of Variant Frequency", weight = "bold" )
 plt.gca().axvline( x=0.05, color="black", linestyle="dashed", label="0.05" )
 plt.gca().axvline( x=0.01, color="black", linestyle=":", label="0.01" )
 plt.legend()
@@ -192,18 +230,21 @@ imageOutput = "/".join( pathToOutput.split("/")[:-1] ) + "/" + pathToOutput.spli
 # exact test.
 plt.subplot( 2, 1, 2 )
 plt.plot( list(graphDict.keys()), list(graphDict.values()), "ro" )
-plt.plot( list( acceptedValues.keys() ), list( acceptedValues.values() ), "bo", label="Above Frequency Threshold" )
 plt.gca().set_yscale( "log" )
-plt.gca().set_ylabel( "p-value", weight="bold" )
 plt.gca().set_xlabel( "Genome Position (bp)", weight="bold" )
 plt.gca().set_title( "Manhattan Plot", weight="bold" )
-plt.gca().invert_yaxis()
+if test == 1:
+    plt.plot( list( acceptedValues.keys() ), list( acceptedValues.values() ), "bo", label = "Above Frequency Threshold" )
+    plt.gca().set_ylabel( "p-value", weight="bold" )
+    plt.gca().invert_yaxis()
+else:
+    plt.gca().set_ylabel( "Frequency", weight = "bold" )
 plt.gca().axhline( y=0.01, color="black", linestyle=":", label="0.01" )
 plt.gca().axhline( y=0.05, color="black", linestyle="dashed", label="0.05" )
 plt.gcf().set_figheight( 12 )
 plt.gcf().set_figwidth( 12 )
 
-# Prevents duplicat entries in legend.
+# Prevents duplicate entries in the legend.
 handles, labels = plt.gca().get_legend_handles_labels()
 by_label = OrderedDict(zip(labels, handles))
 plt.legend(by_label.values(), by_label.keys())
@@ -249,7 +290,7 @@ with open( pathToOutput, "w" ) as outputFile :
         # Else add the necessary spaces and the variants sequence.
         else :
             if replicates > 1:
-                tempLine += ",," + line[5] + ",,," + ( ",," * ( replicates ) )
+                tempLine += ",," + line[5] + ",,," + ( ",," * replicates )
             else:
                 tempLine += ",," + line[5] + ",,,,"
 
