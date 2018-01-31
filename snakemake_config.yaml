@@ -22,5 +22,5 @@ tr_trailing: 20
 tr_sliding_window: "4:25"
 tr_min_len: 30
 tr_headcrop: 2
-
+tr_path_to_bed: "/home/nate/PycharmProjects/iVar/res/ZKV.bed"
 ...

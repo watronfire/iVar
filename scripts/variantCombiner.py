@@ -14,17 +14,17 @@ class Variant:
         self.position = position
         self.ancestral = ancestral
         self.substitution = substitution
+
         self.coverage = list()
         self.coverage.append( coverage )
+
         self.frequency = list()
+        self.frequency.append( float( frequency[:-1] ) / 100.0 )
+
         self.totalCounts = list()
         self.totalCounts.append( totalCounts )
         self.freqA = 0.0
         self.Sn = 0.0
-        if "/" not in frequency:
-            self.frequency.append( float( frequency[:-1] ) / 100.0 )
-        else:
-            self.frequency.append( float( frequency.split( "/" )[0][:-1] ) / 100.0 )
 
 
     def addReplicate( self, coverage, freq, totalCounts ):
@@ -32,22 +32,26 @@ class Variant:
         self.frequency.extend( freq )
         self.totalCounts.extend( totalCounts )
 
+        # Update freqA
+        self.freqA = sum( self.frequency ) / len( self.frequency )
+
+        # Update Sn
+        if self.freqA != 1.0:
+            self.Sn = -( ( ( 1 - self.freqA ) * log( 1 - self.freqA ) ) + ( self.freqA * log( self.freqA ) ) ) / log( 2 )
+        else:
+            self.Sn = 0.0
 
     def getAverage( self ):
-        return sum( self.frequency ) / len( self.frequency )
+        return self.freqA
+
+
 
     def __str__(self):
         frequencyList = list()
         for h in self.frequency:
             frequencyList.append( str( h * 100 ) + "%" )
 
-        self.freqA = sum( self.frequency ) / len( self.frequency )
         freqAStr = str( self.freqA * 100 ) + "%"
-
-        if self.freqA != 1.0:
-            self.Sn = -( ( ( 1 - self.freqA ) * log( 1 - self.freqA ) ) + ( self.freqA * log( self.freqA ) ) ) / log( 2 )
-        else:
-            self.Sn = 0.0
 
         attributes = [ str( self.position ), self.substitution, self.ancestral + " -> " + self.substitution,
                         ",".join(self.coverage), ",".join( frequencyList ) ]

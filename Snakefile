@@ -81,43 +81,35 @@ rule generate_consensus:
     	"tabix {input}.vcf.gz &&"
         "cat {ref_sequence} | bcftools consensus {input}.vcf.gz > {output}"
 
-rule align_reads:
+rule trim_reads:
     input:
-        "{out_dir}/_trimmed/{sample}_R1.trimmed.fastq",
-        "{out_dir}/_trimmed/{sample}_R2.trimmed.fastq"
-    output:
-        "{out_dir}/_aligned_bams/{sample}.trimmed.aligned.bam"
-    shell:
-        #"module load samtools &&"
-	    #"module load bwa &&"
-        "bwa index -a bwtsw {ref_sequence} &&"
-        "bwa mem {ref_sequence} {input[0]} {input[1]} | samtools view -F 4 -Sb -o {output}"
-
-rule sort_aligned_bam:
-    input:
-        "{out_dir}/_aligned_bams/{sample}.trimmed.aligned.bam"
+        "{out_dir}/_aligned_bams/{sample}.aligned.sorted.bam",
+        "{bed}".format( bed = config["tr_path_to_bed"] )
     output:
         "{out_dir}/_aligned_bams/{sample}.trimmed.aligned.sorted.bam",
         "{out_dir}/_coverage/{sample}.coverage.csv",
         "{out_dir}/_output/{sample}.coverage.png"
+    params:
+        rep="{out_dir}/_reports/{sample}.alignreport.txt",
+        tmp="{out_dir}/_tmp/"
     shell:
-        #"module load samtools &&"
-        "samtools sort -o {output[0]} {input} &&"
+        "mkdir -p $(dirname {params[0]}) &&"
+        "mkdir -p {params[1]} &&"
+        "python {s_locations}/align_trim.py {input[1]} --report {params[0]} < {input[0]} | samtools view -F 4 -Sb - | samtools sort -T {params[1]} - -o {output[0]} &&"
         "samtools depth -a {output[0]} > {output[1]} &&"
         "python3 {s_locations}/coverageGraph.py {output[1]} {output[2]}"
 
-
-rule trim_reads:
+rule align_reads:
     input:
-        read1="{out_dir}/_reads/{sample}_R1.fastq",
-        read2="{out_dir}/_reads/{sample}_R2.fastq"
+        "{out_dir}/_reads/{sample}_R1.fastq",
+        "{out_dir}/_reads/{sample}_R2.fastq"
     output:
-        trim1="{out_dir}/_trimmed/{sample}_R1.trimmed.fastq",
-        trim2="{out_dir}/_trimmed/{sample}_R2.trimmed.fastq",
-        trim_unpaired1="{out_dir}/_trimmed/{sample}_R1.trimmed_unpaired.fastq",
-        trim_unpaired2="{out_dir}/_trimmed/{sample}_R2.trimmed_unpaired.fastq"
+        "{out_dir}/_aligned_bams/{sample}.aligned.sorted.bam"
+    params:
+        tmp = "{out_dir}/_tmp/"
     shell:
-        "java -Xmx2g -classpath {s_locations}/trimmomatic-0.35.jar org.usadellab.trimmomatic.TrimmomaticPE -threads 16  {input.read1} {input.read2} {output.trim1} {output.trim_unpaired1} {output.trim2} {output.trim_unpaired2} LEADING:{config[tr_leading]} TRAILING:{config[tr_trailing]} SLIDINGWINDOW:{config[tr_sliding_window]} MINLEN:{config[tr_min_len]} HEADCROP:{config[tr_headcrop]}"
+        #"mkdir -p {params} &&"
+        "bwa mem {ref_sequence} {input[0]} {input[1]} | samtools view -F 4 -Sb | samtools sort -T {params} -o {output}"
 
 rule extract_read_1:
     input:
