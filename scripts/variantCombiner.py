@@ -185,7 +185,7 @@ for entry in list( variantDict.keys() ):
     oc, pv = statTest[test]( variantDict[entry], frequencyLimit )
     histogramList.extend( pv )
 
-    manhattanDict[entry] = variantDict[entry].frequency
+    manhattanDict[int(entry)] = variantDict[entry].frequency
 
     if all( oc ):
         highlights[entry] = variantDict[entry].frequency
