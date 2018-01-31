@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-configfile: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/snakemake_config.yaml"
+configfile: "/home/nate/PycharmProjects/iVar/snakemake_config.yaml"
 
 in_dir = config["in_dir"]
 ext="fastq.gz"
@@ -45,7 +45,7 @@ rule variant_combining:
     output:
         "{out_dir}/_output/{sample}.csv"
     shell:
-        "python {s_locations}/variantCombiner.py -r {config[virus_map]} -o {output} -t {config[vco_test]} -p {config[vco_pvalue]} -f {config[vco_minFreq]} -i {input[0]} {input[1]}"
+        "python3 {s_locations}/variantCombiner.py -r {config[virus_map]} -o {output} -t {config[vco_test]} -p {config[vco_pvalue]} -f {config[vco_minFreq]} -i {input[0]} {input[1]}"
 
 if config["vca_compareWithReference"]:
     rule variant_calling:
@@ -54,7 +54,7 @@ if config["vca_compareWithReference"]:
         output:
             "{out_dir}/_variants/{sample}.csv"
         shell:
-            "module load samtools &&"
+            #"module load samtools &&"
             "samtools faidx {ref_sequence} &&"
             "samtools mpileup -f {ref_sequence} {input[0]} | java -jar {s_locations}/VarScan.v2.3.9.jar pileup2snp --min-coverage {config[vca_minCoverage]} --strand-filter 0 --min-var-freq {config[vca_minVarFreq]} --min-avg-qual {config[vca_minAvgQual]} --p-value {config[vca_pvalue]} --output-vcf 1 > {output}"
 else:
@@ -65,7 +65,7 @@ else:
         output:
             "{out_dir}/_variants/{sample}.csv"
         shell:
-            "module load samtools &&"
+            #"module load samtools &&"
             "samtools faidx {ref_sequence} &&"
             "samtools mpileup -f {input[1]} {input[0]} | java -jar {s_locations}/VarScan.v2.3.9.jar pileup2snp --min-coverage {config[vca_minCoverage]} --strand-filter 0 --min-var-freq {config[vca_minVarFreq]} --min-avg-qual {config[vca_minAvgQual]} --p-value {config[vca_pvalue]} --output-vcf 1 > {output}"
 
@@ -75,8 +75,8 @@ rule generate_consensus:
     output:
         "{out_dir}/_consensus/{sample}.consensus.fasta"
     shell:
-        "module load samtools &&"
-        "module load tabix &&"
+        #"module load samtools &&"
+        #"module load tabix &&"
     	"samtools mpileup -uf {ref_sequence} {input} | bcftools call -mv -Oz -o {input}.vcf.gz &&"
     	"tabix {input}.vcf.gz &&"
         "cat {ref_sequence} | bcftools consensus {input}.vcf.gz > {output}"
@@ -88,8 +88,8 @@ rule align_reads:
     output:
         "{out_dir}/_aligned_bams/{sample}.trimmed.aligned.bam"
     shell:
-        "module load samtools &&"
-	    "module load bwa &&"
+        #"module load samtools &&"
+	    #"module load bwa &&"
         "bwa index -a bwtsw {ref_sequence} &&"
         "bwa mem {ref_sequence} {input[0]} {input[1]} | samtools view -F 4 -Sb -o {output}"
 
@@ -101,10 +101,11 @@ rule sort_aligned_bam:
         "{out_dir}/_coverage/{sample}.coverage.csv",
         "{out_dir}/_output/{sample}.coverage.png"
     shell:
-        "module load samtools &&"
-        "samtools sort -T $PBSTMPDIR -o {output[0]} {input} &&"
+        #"module load samtools &&"
+        "samtools sort -o {output[0]} {input} &&"
         "samtools depth -a {output[0]} > {output[1]} &&"
-        "python {s_locations}/coverageGraph.py {output[1]} {output[2]}"
+        "python3 {s_locations}/coverageGraph.py {output[1]} {output[2]}"
+
 
 rule trim_reads:
     input:

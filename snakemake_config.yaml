@@ -1,9 +1,9 @@
 ---
-in_dir: "/gpfs/home/natem/analysis/testing/input"
-out_dir: "/gpfs/home/natem/analysis/testing"
-ref_sequence: "/gpfs/home/natem/db/zikv/FSS13025.fasta"
-virus_map: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/res/zikvMap.csv"
-script_locations: "/gpfs/home/natem/scripts/zika-pipeline/variant_calling/scripts"
+in_dir: "/home/nate/Downloads/temp/rule/input"
+out_dir: "/home/nate/Downloads/temp/rule"
+ref_sequence: "/home/nate/PycharmProjects/iVar/res/FSS13025.fasta"
+virus_map: "/home/nate/PycharmProjects/iVar/res/zikvMap.csv"
+script_locations: "/home/nate/PycharmProjects/iVar/scripts"
 replicates: [ "a", "b" ]
 
 vco_test: 1
