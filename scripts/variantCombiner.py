@@ -80,6 +80,7 @@ def variantParser( variantFile ):
     return returnDict
 
 # Accepts variants based on whether or not all replicate frequencies are greater than some minimum.
+# returns a boolean list of length replicates which
 def freqLimit( variant, freqLim ):
     outcomes = list()
     for number in variant.frequency:
@@ -163,62 +164,46 @@ for i, file in enumerate( fileList ):
             variantDict = variantParser( inputFile )
         else:
             tempVariantDict = variantParser( inputFile )
-            for pos in variantDict.keys():
-                if pos in tempVariantDict.keys() and variantDict[pos].substitution == tempVariantDict[pos].substitution:
+            for pos in variantDict.keys() & tempVariantDict.keys():
+                if variantDict[pos].substitution == tempVariantDict[pos].substitution:
                     variantDict[pos].addReplicate( tempVariantDict[pos].coverage, tempVariantDict[pos].frequency, tempVariantDict[pos].totalCounts )
 
-graphDict = dict()
-pvalues = list()
-acceptedValues = dict()
-
-# Clean up dictionary...
+# Clean up the dictionary
 for entry in list( variantDict.keys() ):
-
-    # TODO: customize the statistical test being used.
-    # the variable are called OutComes and P-Values, but pv will hold frequencies if test == 2
-    oc, pv = statTest[test]( variantDict[entry], frequencyLimit )
-
-    # Because of the way this program assembles the variantDict, entries in which replicates weren't found need to
-    # be removed.
-    if len( variantDict[entry].coverage ) != replicates:
+    if len( variantDict[entry].frequency ) != replicates:
         del variantDict[entry]
 
-    else:
-        # Converts entry to an int so that it can be sorted. If left uncoverted, then matplotlib will sort the variants
-        # alphabetically, instead of numerically. Graph isn't the best...
-        graphDict[int(entry)] = pv
-        pvalues.extend( pv )
+# Data structures for graphing.
+# if test = 1, holds pvalues, else frequencies
+histogramList = list()
+# Holds frequencies mapped to genomic position
+manhattanDict = dict()
+# Holds frequencies which pass test.
+highlights = dict()
 
-        # Creates a subset of graphDict which includes values which would have been accepted by a threshold test
-        # rather than the fisher exact test being used.
-        if test == 1:
-            average = sum( variantDict[entry].frequency ) / len( variantDict[entry].frequency )
-            if average > frequencyLimit :
-                acceptedValues[int(entry)] = graphDict[int(entry)]
+for entry in list( variantDict.keys() ):
+    oc, pv = statTest[test]( variantDict[entry], frequencyLimit )
+    histogramList.extend( pv )
 
-        # Deletes entries from variant dict unless all replicates pass fisher exact test.
-        if not all( oc ):
-            del variantDict[entry]
+    manhattanDict[entry] = variantDict[entry].frequency
+
+    if all( oc ):
+        highlights[entry] = variantDict[entry].frequency
+
 
 # Generates a histogram of p-values
 plt.subplot( 2, 1, 1 )
 
 # Calculates the lower end of the histogram so adequate resolution is seen.
-lowestNum = 0.01
-for i in list( graphDict.values() ):
-    for k in i:
-        if k < lowestNum:
-            lowestNum = k
+lowestNum = min( histogramList )
 
-n, bins, patches = plt.hist( pvalues, facecolor="red", alpha=0.75, bins=np.logspace(np.log10(lowestNum/10),np.log10(1.0), 50) )
+n, bins, patches = plt.hist( histogramList, facecolor="red", alpha=0.75, bins=np.logspace(np.log10(lowestNum/10),np.log10(1.0), 50) )
 plt.gca().set_xscale( "log" )
-
+plt.gca().set_ylabel( "Frequency", weight = "bold" )
 if test == 1:
-    plt.gca().set_ylabel( "Frequency", weight="bold" )
     plt.gca().set_xlabel( "p-values", weight="bold" )
     plt.gca().set_title( "Histogram of p-values", weight="bold" )
 else:
-    plt.gca().set_ylabel( "Frequency", weight = "bold" )
     plt.gca().set_xlabel( "Frequency of Variant", weight = "bold" )
     plt.gca().set_title( "Histogram of Variant Frequency", weight = "bold" )
 plt.gca().axvline( x=0.05, color="black", linestyle="dashed", label="0.05" )
@@ -229,18 +214,14 @@ imageOutput = "/".join( pathToOutput.split("/")[:-1] ) + "/" + pathToOutput.spli
 # Generates a manhattan plot. Also colors values which would have been accepted by a flat threshold, instead of fisher
 # exact test.
 plt.subplot( 2, 1, 2 )
-plt.plot( list(graphDict.keys()), list(graphDict.values()), "ro" )
+plt.plot( list( manhattanDict.keys() ), list( manhattanDict.values() ), "ro" )
 plt.gca().set_yscale( "log" )
 plt.gca().set_xlabel( "Genome Position (bp)", weight="bold" )
 plt.gca().set_title( "Manhattan Plot", weight="bold" )
+plt.gca().set_ylabel( "Frequency", weight = "bold" )
 if test == 1:
-    plt.plot( list( acceptedValues.keys() ), list( acceptedValues.values() ), "bo", label = "Above Frequency Threshold" )
-    plt.gca().set_ylabel( "p-value", weight="bold" )
-    plt.gca().invert_yaxis()
-else:
-    plt.gca().set_ylabel( "Frequency", weight = "bold" )
-plt.gca().axhline( y=0.01, color="black", linestyle=":", label="0.01" )
-plt.gca().axhline( y=0.05, color="black", linestyle="dashed", label="0.05" )
+    plt.plot( list( highlights.keys() ), list( highlights.values() ), "bo", label = "Above Frequency Threshold" )
+    plt.gca().axhline( y=frequencyLimit, color="black", linestyle="dashed", label=str( frequencyLimit ) )
 plt.gcf().set_figheight( 12 )
 plt.gcf().set_figwidth( 12 )
 
