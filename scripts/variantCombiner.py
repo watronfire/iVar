@@ -296,4 +296,38 @@ for i in range( len( virusMap ) ):
         if variantFound:
             virusMap.iloc[i, virusMap.columns.get_loc( "N_S" )] = "S" if virusMap.iloc[i, 6] == virusMap.iloc[i, virusMap.columns.get_loc( "var_aa" )] else "N"
 
+# Need to output the statistics
+virusMap["Sn"] = pd.to_numeric( virusMap["Sn"] )
+if replicates == 1:
+    virusMap["var_freq_1"] = pd.to_numeric( virusMap["var_freq_1"] )
+    diversityNT = virusMap["var_freq_1"].sum()
+
+    distanceN = virusMap.loc[ virusMap["N_S"] == "N", "var_freq_1" ].iloc[0]
+    distanceS = virusMap.loc[ virusMap["N_S"] == "S", "var_freq_1" ].iloc[0]
+else:
+    virusMap["var_freq_ave"] = pd.to_numeric( virusMap["var_freq_ave"] )
+    diversityNT = virusMap["var_freq_ave"].sum
+    distanceN = virusMap.loc[ virusMap["N_S"] == "N", "var_freq_ave" ].iloc[ 0 ]
+    distanceS = virusMap.loc[ virusMap["N_S"] == "S", "var_freq_ave" ].iloc[ 0 ]
+
+distance = diversityNT
+diversityNT = diversityNT / 10272
+
+complexitySn = virusMap["Sn"].sum() / 10272
+
+richness = virusMap["Sn"].count()
+
+try:
+    selectionPN = distanceN / (distanceN + distanceS)
+except ZeroDivisionError:
+    selectionPN = 0
+
+# Construct a dataframe with stats
+stats_data = { "Test" : [ "Complexity_Sn", "Diversity_nt", "Richness", "Distance", "Distance","Distance", "Selection_pN" ],
+               "region" : [ "CDS", "CDS", "CDS", "CDS", "CDS_N", "CDS_S", "CDS" ],
+               "result" : [ complexitySn, diversityNT, richness, distance, distanceN, distanceS, selectionPN ] }
+
+statsDF = pd.DataFrame( stats_data, columns=[ "Test", "region", "result" ] )
+statsDF.to_csv( imageOutput + ".stats.csv", index=False )
+
 virusMap.to_csv( pathToOutput, index=False )
