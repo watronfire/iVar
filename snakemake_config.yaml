@@ -21,6 +21,6 @@ tr_leading: 20
 tr_trailing: 20
 tr_sliding_window: "4:25"
 tr_min_len: 30
-tr_headcrop: 2
+tr_headcrop: 22
 
 ...

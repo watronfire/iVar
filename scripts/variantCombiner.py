@@ -2,8 +2,9 @@ import argparse
 import numpy as np
 from csv import reader
 from math import log
-from collections import OrderedDict
 from scipy.stats import fisher_exact
+from collections import OrderedDict
+import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -14,17 +15,26 @@ class Variant:
         self.position = position
         self.ancestral = ancestral
         self.substitution = substitution
+
         self.coverage = list()
         self.coverage.append( coverage )
+
         self.frequency = list()
+        self.frequency.append( float( frequency[:-1] ) / 100.0 )
+
         self.totalCounts = list()
-        self.totalCounts.append( totalCounts )
+        self.totalCounts.append( int( totalCounts ) )
+
         self.freqA = 0.0
+
         self.Sn = 0.0
-        if "/" not in frequency:
-            self.frequency.append( float( frequency[:-1] ) / 100.0 )
+        self.updateSn( self.frequency[0] )
+
+    def updateSn( self, f ):
+        if f != 1.0:
+            self.Sn = -( ( ( 1 - f ) * log( 1 - f ) ) + ( f * log( f ) ) ) / log( 2 )
         else:
-            self.frequency.append( float( frequency.split( "/" )[0][:-1] ) / 100.0 )
+            self.Sn = 0.0
 
 
     def addReplicate( self, coverage, freq, totalCounts ):
@@ -32,22 +42,37 @@ class Variant:
         self.frequency.extend( freq )
         self.totalCounts.extend( totalCounts )
 
+        # Update freqA
+        self.freqA = sum( self.frequency ) / len( self.frequency )
+
+        # Update Sn
+        self.updateSn( self.freqA )
+
+    def getChange( self ):
+        return self.ancestral + " -> " + self.substitution
 
     def getAverage( self ):
         return sum( self.frequency ) / len( self.frequency )
+
+    def getList( self ):
+        outputList = list()
+        outputList.append( self.position )
+        outputList.append( self.substitution )
+        outputList.append( self.getChange() )
+        outputList.extend( self.coverage )
+        outputList.extend( self.frequency)
+        if len( self.frequency ) > 1 :
+            outputList.append( self.freqA )
+        outputList.extend( ["", "", ""] )
+        outputList.append( self.Sn )
+        return outputList
 
     def __str__(self):
         frequencyList = list()
         for h in self.frequency:
             frequencyList.append( str( h * 100 ) + "%" )
 
-        self.freqA = sum( self.frequency ) / len( self.frequency )
         freqAStr = str( self.freqA * 100 ) + "%"
-
-        if self.freqA != 1.0:
-            self.Sn = -( ( ( 1 - self.freqA ) * log( 1 - self.freqA ) ) + ( self.freqA * log( self.freqA ) ) ) / log( 2 )
-        else:
-            self.Sn = 0.0
 
         attributes = [ str( self.position ), self.substitution, self.ancestral + " -> " + self.substitution,
                         ",".join(self.coverage), ",".join( frequencyList ) ]
@@ -57,6 +82,7 @@ class Variant:
 
         return ",".join( attributes )
 
+# Have to declare the value before parsing as function requires it, but its assigned later.
 pvLimit = 0.05
 
 def variantParser( variantFile ):
@@ -70,7 +96,7 @@ def variantParser( variantFile ):
             iposition = ro[1]
             iancestral = ro[2]
             icounts = ro[5]
-            iTotCounts = int( ro[4] )
+            iTotCounts = ro[4]
             ifrequency = ro[6]
             isubstitution = ro[18]
 
@@ -143,19 +169,6 @@ frequencyLimit = args.frequency
 fileList = args.input
 replicates = len( fileList )
 
-# Iterate throught the virus map, and load into list. As well, saving the sequence.
-lines = list()
-with open( reference, "r" ) as virusMap:
-    rd = reader( virusMap )
-    seq = "n"
-    fl = True
-    for row in rd:
-        lines.append( row )
-        if not fl:
-            seq += row[ 5 ]
-        else:
-            fl = False
-
 # Generates variantDictionary with replicates if necessary.
 variantDict = dict()
 for i, file in enumerate( fileList ):
@@ -188,8 +201,9 @@ for entry in list( variantDict.keys() ):
     manhattanDict[int(entry)] = variantDict[entry].frequency
 
     if all( oc ):
-        highlights[entry] = variantDict[entry].frequency
-
+        highlights[int(entry)] = variantDict[entry].frequency
+    else:
+        del variantDict[entry]
 
 # Generates a histogram of p-values
 plt.subplot( 2, 1, 1 )
@@ -219,9 +233,9 @@ plt.gca().set_yscale( "log" )
 plt.gca().set_xlabel( "Genome Position (bp)", weight="bold" )
 plt.gca().set_title( "Manhattan Plot", weight="bold" )
 plt.gca().set_ylabel( "Frequency", weight = "bold" )
-if test == 1:
-    plt.plot( list( highlights.keys() ), list( highlights.values() ), "bo", label = "Above Frequency Threshold" )
-    plt.gca().axhline( y=frequencyLimit, color="black", linestyle="dashed", label=str( frequencyLimit ) )
+histLabel = "Above P-value Threshold" if test == 1 else "Above Frequency Threshold"
+plt.plot( list( highlights.keys() ), list( highlights.values() ), "bo", label = histLabel )
+plt.gca().axhline( y=frequencyLimit, color="black", linestyle="dashed", label=str( frequencyLimit ) )
 plt.gcf().set_figheight( 12 )
 plt.gcf().set_figwidth( 12 )
 
@@ -233,112 +247,53 @@ plt.legend(by_label.values(), by_label.keys())
 # Saves the graphs
 plt.savefig( imageOutput + ".png" )
 
-# Creates, or overrides, an output file.
-with open( pathToOutput, "w" ) as outputFile :
+# Load virus map from file
+virusMap = pd.read_csv( reference )
 
-    # List to hold lines before writing to file.
-    writingBuffer = list()
+# Replace empty cells will empty strings.
+virusMap = virusMap.replace( np.nan, "", regex=True )
 
-    # Some statistical measures which will be calculated along the way.
-    complexitySn = 0
-    diversityNT = 0
-    richness = 0
-    distanceN = 0
-    distanceS = 0
+# Save sequence seperately and index such that indecies match up with bp position.
+sequence = list( virusMap["nucleotide"] )
+sequence.insert( 0, "n" )
 
-    for i, line in enumerate( lines ):
+# Introduce some new columns
+virusMap["var_site"] = ""
+virusMap["variant"] = virusMap["nucleotide"]
+virusMap["change"] = ""
+for i in range( 1, replicates + 1 ):
+    virusMap["coverage_%s" % i] = ""
+for i in range( 1, replicates + 1 ):
+    virusMap["var_freq_%s" % i] = ""
+if replicates > 1:
+    virusMap["var_freq_ave"] = ""
+virusMap["var_3nt_aa"] = ""
+virusMap["var_aa"] = ""
+virusMap["N_S"] = ""
+virusMap["Sn"] = ""
 
-        # String which will hold the updated line in document.
-        tempLine = ",".join( line )
 
-        # If reading the first line then append additional column names.
-        if i == 0:
-            if replicates > 1:
-                coverages = [ "coverage_%s" % i for i in range( 1, replicates + 1 ) ]
-                var_freqs = [ "var_freq_%s" % i for i in range( 1, replicates + 1 ) ]
-                tempLine += ",var_site,variant,Change," + ",".join( coverages ) + "," + ",".join( var_freqs ) + ",var_freq_ave,var_3nt_aa,var_aa,N_S,Sn"
-            else:
-                tempLine += ",var_site,variant,change,coverage,var_freq,var_3nt_aa,var_aa,N_S,Sn,"
-            writingBuffer.append( tempLine )
-            continue
+for i in range( len( virusMap ) ):
+    bp = str( virusMap.iloc[i,0] )
+    variantFound = False
+    if bp in variantDict:
+        virusMap.iloc[i,7:] = variantDict[bp].getList()
+        variantFound = True
 
-        # If the position is found in the variant dictionary, then we add the information we have for the variant to the line.
-        variantFound = False
-        if line[0] in variantDict:           #and variantDict[line[0]].freqA > 0.03:
-            tempLine += "," + str( variantDict[line[0]] ) + ","
-            variantFound = True
-
-        # Else add the necessary spaces and the variants sequence.
-        else :
-            if replicates > 1:
-                tempLine += ",," + line[5] + ",,," + ( ",," * replicates )
-            else:
-                tempLine += ",," + line[5] + ",,,,"
-
-        # Next translate variant sequence.
+    if "UTR" not in virusMap.iloc[i,1]:
         codon = ""
-        if "UTR" not in line[1] :
+        codonPos = virusMap.iloc[i,2]
 
-            pos = int( line[0] )
-            codonPos = int( line[2] )
+        if codonPos == 1 :
+            codon = virusMap.iloc[i,8] + virusMap.iloc[i + 1, 8] + virusMap.iloc[i + 2, 8]
+        elif codonPos == 2 :
+            codon = virusMap.iloc[i - 1, 8] + virusMap.iloc[i, 8] + virusMap.iloc[i + 1, 8]
+        else :
+            codon = virusMap.iloc[i - 2, 8] + virusMap.iloc[i - 1, 8] + virusMap.iloc[i, 8]
 
-            # If a variant was found then we use its substitution.
-            var = ""
-            if variantFound :
-                var = variantDict[line[0]].substitution
-            else :
-                var = seq[pos]
+        virusMap.iloc[i, virusMap.columns.get_loc( "var_3nt_aa" )] = codon
+        virusMap.iloc[i, virusMap.columns.get_loc( "var_aa" )] = codonTable[codon]
+        if variantFound:
+            virusMap.iloc[i, virusMap.columns.get_loc( "N_S" )] = "S" if virusMap.iloc[i, 6] == virusMap.iloc[i, virusMap.columns.get_loc( "var_aa" )] else "N"
 
-            # Create the Codon at each position.
-            if codonPos == 1 :
-                codon = var + seq[pos + 1] + seq[pos + 2]
-            elif codonPos == 2 :
-                codon = seq[pos - 1] + var + seq[pos + 1]
-            else :
-                codon = seq[pos - 2] + seq[pos - 1] + var
-
-            # Determine whether mutation is synonymous or non-synonymous. Also going to calculate some statistics here.
-            mutationType = ""
-            if variantFound :
-
-                # Calculate specified statistics.
-                complexitySn += variantDict[line[0]].Sn
-                diversityNT += variantDict[line[0]].freqA
-                richness += 1
-
-                if line[6] == codonTable[codon] :
-                    mutationType = "S" + "," + str( variantDict[line[0]].Sn )
-                    distanceS += variantDict[line[0]].freqA
-                else :
-                    mutationType = "N" + "," + str( variantDict[line[0]].Sn )
-                    distanceN += variantDict[line[0]].freqA
-
-                    # add the codon, and its translation to the line.
-            tempLine += codon + "," + codonTable[codon] + "," + mutationType
-
-        # write the line to file.
-        # outputFile.write( tempLine  )
-        writingBuffer.append( tempLine )
-
-    distance = diversityNT
-    complexitySn /= 10272
-    diversityNT /= 10272
-    try:
-        selectionPN = distanceN / (distanceN + distanceS)
-    except ZeroDivisionError:
-        selectionPN = 0
-
-    if replicates > 1:
-        writingBuffer[0] += ",,Test,region,result"
-    else:
-        writingBuffer[0] += ",Test,region,result"
-    writingBuffer[1] += ",,,,,Complexity_Sn,CDS," + str( complexitySn )
-    writingBuffer[2] += ",,,,,Diversity_nt,CDS," + str( diversityNT )
-    writingBuffer[3] += ",,,,,Richness,CDS," + str( richness )
-    writingBuffer[4] += ",,,,,Distance,CDS," + str( distance )
-    writingBuffer[5] += ",,,,,Distance,CDS_N," + str( distanceN )
-    writingBuffer[6] += ",,,,,Distance,CDS_S," + str( distanceS )
-    writingBuffer[7] += ",,,,,Selection_pN,CDS," + str( selectionPN )
-
-    for entry in writingBuffer :
-        outputFile.write( entry + "\n" )
+virusMap.to_csv( pathToOutput, index=False )
