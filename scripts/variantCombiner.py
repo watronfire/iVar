@@ -1,89 +1,14 @@
 import argparse
 import numpy as np
 from csv import reader
-from math import log
+from variant import Variant
+from variant_manager import VariantManager
 from scipy.stats import fisher_exact
 from collections import OrderedDict
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-# Data Structure for holding the variant information
-class Variant:
-    def __init__( self, position, ancestral, substitution, coverage, frequency, totalCounts ):
-        self.position = position
-        self.ancestral = ancestral
-        self.substitution = substitution
-
-        self.coverage = list()
-        self.coverage.append( coverage )
-
-        self.frequency = list()
-        self.frequency.append( float( frequency[:-1] ) / 100.0 )
-
-        self.totalCounts = list()
-        self.totalCounts.append( int( totalCounts ) )
-
-        self.freqA = 0.0
-
-        self.Sn = 0.0
-        self.updateSn( self.frequency[0] )
-
-    def updateSn( self, f ):
-        if f != 1.0:
-            self.Sn = -( ( ( 1 - f ) * log( 1 - f ) ) + ( f * log( f ) ) ) / log( 2 )
-        else:
-            self.Sn = 0.0
-
-
-    def addReplicate( self, coverage, freq, totalCounts ):
-        self.coverage.extend( coverage )
-        self.frequency.extend( freq )
-        self.totalCounts.extend( totalCounts )
-
-        # Update freqA
-        self.freqA = sum( self.frequency ) / len( self.frequency )
-
-        # Update Sn
-        self.updateSn( self.freqA )
-
-    def getChange( self ):
-        return self.ancestral + " -> " + self.substitution
-
-    def getAverage( self ):
-        return sum( self.frequency ) / len( self.frequency )
-
-    def getList( self ):
-        outputList = list()
-        outputList.append( self.position )
-        outputList.append( self.substitution )
-        outputList.append( self.getChange() )
-        outputList.extend( self.coverage )
-        outputList.extend( self.frequency)
-        if len( self.frequency ) > 1 :
-            outputList.append( self.freqA )
-        outputList.extend( ["", "", ""] )
-        outputList.append( self.Sn )
-        return outputList
-
-    def __str__(self):
-        frequencyList = list()
-        for h in self.frequency:
-            frequencyList.append( str( h * 100 ) + "%" )
-
-        freqAStr = str( self.freqA * 100 ) + "%"
-
-        attributes = [ str( self.position ), self.substitution, self.ancestral + " -> " + self.substitution,
-                        ",".join(self.coverage), ",".join( frequencyList ) ]
-
-        if len( self.frequency ) > 1:
-            attributes.append( freqAStr )
-
-        return ",".join( attributes )
-
-# Have to declare the value before parsing as function requires it, but its assigned later.
-pvLimit = 0.05
 
 def variantParser( variantFile ):
     returnDict = dict()
@@ -104,39 +29,6 @@ def variantParser( variantFile ):
             # Create a new dictionary entry with the variant information mapped to its bp position.
             returnDict[iposition] = Variant( iposition, iancestral, isubstitution, icounts, ifrequency, iTotCounts )
     return returnDict
-
-# Accepts variants based on whether or not all replicate frequencies are greater than some minimum.
-# returns a boolean list of length replicates which
-def freqLimit( variant, freqLim ):
-    outcomes = list()
-    for number in variant.frequency:
-        outcomes.append( number > freqLim )
-    return outcomes, variant.frequency
-
-# Calculates whether the variants are greater than the expected percentage
-def fisherTest( variant, ep ):
-    outcomes = list()
-    pvs = list()
-    for j, number in enumerate( variant.coverage ):
-        number = int( number )
-        remainder = variant.totalCounts[j]
-        expectedPercent = ep
-
-        # Values which can be changed are the fisher-exact test expected values, and the outcomes threshold.
-        oddsratio, pvalue = fisher_exact( [ [number, remainder], [expectedPercent * 100, (1-expectedPercent) * 100] ], alternative="greater" )
-        pvs.append( pvalue )
-        outcomes.append( pvalue < pvLimit )
-
-    return outcomes, pvs
-
-# Accepts variants based on whether or not the average frequency of all replicates is greater than some minimum.
-def averageFreqLimit( variant, freqLim ):
-    outcomes = list()
-    outcomes.append( variant.getAverage() > freqLim )
-    return outcomes, variant.frequency
-
-# Dictionary with reference to all statistical tests available.
-statTest = { 1 : fisherTest, 2 : freqLimit, 3 : averageFreqLimit }
 
 # Generate a translation table dictionary
 bases = ['T', 'C', 'A', 'G']
@@ -169,6 +61,13 @@ frequencyLimit = args.frequency
 fileList = args.input
 replicates = len( fileList )
 
+inclusionList = [ "variance" ]
+
+
+########################
+##  Combine Variants  ##
+#########################################################################################
+
 # Generates variantDictionary with replicates if necessary.
 variantDict = dict()
 for i, file in enumerate( fileList ):
@@ -181,29 +80,25 @@ for i, file in enumerate( fileList ):
                 if variantDict[pos].substitution == tempVariantDict[pos].substitution:
                     variantDict[pos].addReplicate( tempVariantDict[pos].coverage, tempVariantDict[pos].frequency, tempVariantDict[pos].totalCounts )
 
-# Clean up the dictionary
+
+########################
+##  Confirm Variants  ##
+#########################################################################################
+
 for entry in list( variantDict.keys() ):
     if len( variantDict[entry].frequency ) != replicates:
         del variantDict[entry]
 
-# Data structures for graphing.
-# if test = 1, holds pvalues, else frequencies
-histogramList = list()
-# Holds frequencies mapped to genomic position
-manhattanDict = dict()
-# Holds frequencies which pass test.
-highlights = dict()
+vm = VariantManager( variantDict, False )
 
-for entry in list( variantDict.keys() ):
-    oc, pv = statTest[test]( variantDict[entry], frequencyLimit )
-    histogramList.extend( pv )
+histogramList, manhattanDict, highlights = vm.compareFreq( frequencyLimit, test, pvLimit)
 
-    manhattanDict[int(entry)] = variantDict[entry].frequency
+variantDict = vm.getManagedVariants()
 
-    if all( oc ):
-        highlights[int(entry)] = variantDict[entry].frequency
-    else:
-        del variantDict[entry]
+
+################
+##  Graphing  ##
+#########################################################################################
 
 # Generates a histogram of p-values
 plt.subplot( 2, 1, 1 )
@@ -247,15 +142,16 @@ plt.legend(by_label.values(), by_label.keys())
 # Saves the graphs
 plt.savefig( imageOutput + ".png" )
 
+
+##############
+##  Output  ##
+#########################################################################################
+
 # Load virus map from file
 virusMap = pd.read_csv( reference )
 
 # Replace empty cells will empty strings.
 virusMap = virusMap.replace( np.nan, "", regex=True )
-
-# Save sequence seperately and index such that indecies match up with bp position.
-sequence = list( virusMap["nucleotide"] )
-sequence.insert( 0, "n" )
 
 # Introduce some new columns
 virusMap["var_site"] = ""
@@ -271,13 +167,14 @@ virusMap["var_3nt_aa"] = ""
 virusMap["var_aa"] = ""
 virusMap["N_S"] = ""
 virusMap["Sn"] = ""
-
+for item in inclusionList:
+    virusMap[item] = ""
 
 for i in range( len( virusMap ) ):
     bp = str( virusMap.iloc[i,0] )
     variantFound = False
     if bp in variantDict:
-        virusMap.iloc[i,7:] = variantDict[bp].getList()
+        virusMap.iloc[i,7:] = variantDict[bp].getList( inclusionList )
         variantFound = True
 
     if "UTR" not in virusMap.iloc[i,1]:
@@ -296,20 +193,35 @@ for i in range( len( virusMap ) ):
         if variantFound:
             virusMap.iloc[i, virusMap.columns.get_loc( "N_S" )] = "S" if virusMap.iloc[i, 6] == virusMap.iloc[i, virusMap.columns.get_loc( "var_aa" )] else "N"
 
+
+##################
+##  Statistics  ##
+#########################################################################################
+
 # Need to output the statistics
 virusMap["Sn"] = pd.to_numeric( virusMap["Sn"] )
 if replicates == 1:
     virusMap["var_freq_1"] = pd.to_numeric( virusMap["var_freq_1"] )
     diversityNT = virusMap["var_freq_1"].sum()
-
-    distanceN = virusMap.loc[ virusMap["N_S"] == "N", "var_freq_1" ].iloc[0]
-    distanceS = virusMap.loc[ virusMap["N_S"] == "S", "var_freq_1" ].iloc[0]
+    try:
+        distanceN = virusMap.loc[ virusMap["N_S"] == "N", "var_freq_1" ].iloc[0]
+    except IndexError:
+        distanceN = 0
+    try:
+        distanceS = virusMap.loc[ virusMap["N_S"] == "S", "var_freq_1" ].iloc[0]
+    except IndexError:
+        distanceS = 0
 else:
     virusMap["var_freq_ave"] = pd.to_numeric( virusMap["var_freq_ave"] )
-    diversityNT = virusMap["var_freq_ave"].sum
-    distanceN = virusMap.loc[ virusMap["N_S"] == "N", "var_freq_ave" ].iloc[ 0 ]
-    distanceS = virusMap.loc[ virusMap["N_S"] == "S", "var_freq_ave" ].iloc[ 0 ]
-
+    diversityNT = virusMap["var_freq_ave"].sum()
+    try:
+        distanceN = virusMap.loc[ virusMap["N_S"] == "N", "var_freq_ave" ].iloc[0]
+    except IndexError:
+        distanceN = 0
+    try:
+        distanceS = virusMap.loc[ virusMap["N_S"] == "S", "var_freq_ave" ].iloc[0]
+    except IndexError:
+        distanceS = 0
 distance = diversityNT
 diversityNT = diversityNT / 10272
 
