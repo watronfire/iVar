@@ -45,6 +45,7 @@ parser.add_argument( "-p", "--pvalue", help="Maximum p-value for a variant to be
 parser.add_argument( "-i", "--input", nargs="+", help="Path to input variant files", type=str, required=True )
 parser.add_argument( "-t", "--test", help="Statistical test used to confirm variants. 1-Fisher's Exact Test, 2-Strict Frequency Limit, 3-Average Frequency Limit", type=int, required=False )
 args = parser.parse_args()
+pvLimit = 0.05
 
 if args.test:
     # Assign the test. Furthermore, if fishers exact test is used then a maximum p-value is required.
