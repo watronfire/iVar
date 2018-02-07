@@ -15,7 +15,7 @@ class VariantManager( object ):
         return outcomes, variant.frequency
 
     # Calculates whether the variants are greater than the expected percentage
-    def fisherTest( self, variant, freqLim ) :
+    def fisherTest( self, variant, freqLim, pvLimit ) :
         outcomes = list()
         pvs = list()
         for j, number in enumerate( variant.coverage ) :
