@@ -4,6 +4,7 @@ MAINTAINER Nate Matteson <natem@scripps.edu>
 
 RUN apt-get update
 RUN apt-get install -y python3-setuptools python3-docutils python3-flask default-jre gzip git python3-pip
+RUN apt-get install -y bwa samtools bcftools tabix
 
 ENV JAVA_HOME  /usr/lib/jvm/java-8-openjdk-amd64
 
