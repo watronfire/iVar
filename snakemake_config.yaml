@@ -1,9 +1,9 @@
 ---
-in_dir: "/home/nate/Downloads/temp/rule/input"
-out_dir: "/home/nate/Downloads/temp/rule"
-ref_sequence: "/home/nate/PycharmProjects/iVar/res/FSS13025.fasta"
-virus_map: "/home/nate/PycharmProjects/iVar/res/zikvMap.csv"
-script_locations: "/home/nate/PycharmProjects/iVar/scripts"
+in_dir: "/home/user/wd/input"
+out_dir: "/home/user/wd"
+ref_sequence: "/home/user/iVar/res/FSS13025.fasta"
+virus_map: "/home/user/iVar/res/zikvMap.csv"
+script_locations: "/home/user/iVar/scripts"
 replicates: [ "a", "b" ]
 
 vco_test: 1

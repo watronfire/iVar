@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-configfile: "/home/nate/PycharmProjects/iVar/snakemake_config.yaml"
+configfile: "/home/user/iVar/snakemake_config.yaml"
 
 in_dir = config["in_dir"]
 ext="fastq.gz"

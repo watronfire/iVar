@@ -3,7 +3,6 @@ import numpy as np
 from csv import reader
 from variant import Variant
 from variant_manager import VariantManager
-from scipy.stats import fisher_exact
 from collections import OrderedDict
 import pandas as pd
 import matplotlib
