@@ -14,9 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bcftools
 
 # Install samtools and the like.
-RUN apt install --yes wget libcurl3-gnutls && \
+RUN apt install --yes wget && \
     wget http://mirrors.kernel.org/ubuntu/pool/universe/s/samtools/samtools_1.7-1_amd64.deb && \
-    wget http://mirrors.kernel.org/ubuntu/pool/universe/h/htslib/htslib_1.7-1.debian.tar.xz   && \
+    wget http://mirrors.kernel.org/ubuntu/pool/universe/h/htslib/libhts2_1.7-1_amd64.deb    && \
     dpkg -i samtools_*.deb libhts2_*.deb && \
     rm *.deb && \
     apt clean
