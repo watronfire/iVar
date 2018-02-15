@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bcftools
 
 # Install samtools and the like.
-RUN apt install --yes wget libbz2-1.0 libc6 liblzma5 libssl1.1 zlib1g && \
+RUN apt install --yes wget libbz2-1.0 libc6 liblzma5 zlib1g && \
     wget http://mirrors.kernel.org/ubuntu/pool/universe/s/samtools/samtools_1.7-1_amd64.deb && \
     wget http://mirrors.kernel.org/ubuntu/pool/universe/h/htslib/libhts2_1.7-1_amd64.deb && \
     dpkg -i samtools_*.deb libhts2_*.deb && \
